@@ -76,6 +76,7 @@ function Spearthrowable:LaunchProjectile(attacker, target)
 
 	    local proj = SpawnPrefab(self.projectile)
 	    if proj then
+            proj._spear = self.inst:GetSaveRecord() --#rezecib added to save spear data for respawning at destination
             if proj.components.projectile then
     	        proj.Transform:SetPosition(attacker.Transform:GetWorldPosition() )
 				--#rezecib had to add the line below because projectile refers back to weapon instead
@@ -85,6 +86,7 @@ function Spearthrowable:LaunchProjectile(attacker, target)
                 proj.Transform:SetPosition( attacker.Transform:GetWorldPosition() )
                 proj.components.complexprojectile:Launch(Vector3( target.Transform:GetWorldPosition() ), attacker, self.inst)
             end
+            self.inst:Remove() --#rezecib added to remove the spear
 	    end
 	end
 end

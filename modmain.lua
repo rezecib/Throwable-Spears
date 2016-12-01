@@ -17,48 +17,44 @@ local smallhits =
 	eyeplant = true,
 }
 
+local function spearthrow_onattack(inst, attacker, target, skipsanity)
+    local smalltarget = target:HasTag("smallcreature")
+                and not target:HasTag("spider")
+                and not smallhits[target.prefab]
+    local missed = false
+    local spear = GLOBAL.SpawnSaveRecord(inst._spear)
+    spear.Transform:SetPosition(inst:GetPosition():Get())
+    if math.random() < SMALL_MISS_CHANCE and smalltarget then
+        missed = true
+        if attacker.components and attacker.components.talker then
+            local miss_message = "Ugh, I don't think I can hit something that small!"
+            if attacker.prefab == 'wx78' then miss_message = "INSUFFICIENT ACCURACY" end
+            attacker.components.talker:Say(miss_message)
+            target:PushEvent("attacked", {attacker = attacker, damage = 0, weapon = spear})
+        end
+    else
+        if target.components.combat then
+            spear.projectile = true
+            target.components.combat:GetAttacked(attacker, attacker.components.combat:CalcDamage(target, spear), spear)
+        end			
+    end
+    if spear.components.finiteuses then
+        spear.components.finiteuses:Use((smalltarget and not missed)
+            and GLOBAL.TUNING.SPEAR_USES/SMALL_USES
+            or GLOBAL.TUNING.SPEAR_USES/LARGE_USES)
+    end
+    spear:AddTag("scarytoprey")
+    spear:DoTaskInTime(1, function(inst) inst:RemoveTag("scarytoprey") end)
+    inst:Remove()
+
+    attacker.SoundEmitter:PlaySound("dontstarve/wilson/attack_weapon", nil, nil, true)
+end
+
 AddPrefabPostInit("spear", function(inst)
 	if not GLOBAL.TheWorld.ismastersim then return end
-	local spear = inst
-	local function onattack(inst, attacker, target, skipsanity)
-		local smalltarget = target:HasTag("smallcreature")
-					and not target:HasTag("spider")
-					and not smallhits[target.prefab]
-		local missed = false
-		if math.random() < SMALL_MISS_CHANCE and smalltarget then
-			missed = true
-			if attacker.components and attacker.components.talker then
-				local miss_message = "Ugh, I don't think I can hit something that small!"
-				if attacker.prefab == 'wx78' then miss_message = "INSUFFICIENT ACCURACY" end
-				attacker.components.talker:Say(miss_message)
-				target:PushEvent("attacked", {attacker = attacker, damage = 0, weapon = spear})
-			end
-		else
-			if target.components.combat then
-				spear.projectile = true
-				target.components.combat:GetAttacked(attacker, attacker.components.combat:CalcDamage(target, spear), spear)
-			end			
-		end
-			
-		local newspear = GLOBAL.SpawnPrefab('spear')
-		newspear.Transform:SetPosition(inst:GetPosition():Get())
-		if newspear.components.finiteuses then
-			newspear.components.finiteuses:SetUses(spear.components.finiteuses:GetUses())
-			newspear.components.finiteuses:Use((smalltarget and not missed)
-				and GLOBAL.TUNING.SPEAR_USES/SMALL_USES
-				or GLOBAL.TUNING.SPEAR_USES/LARGE_USES)
-		end
-		newspear:AddTag("scarytoprey")
-		newspear:DoTaskInTime(1, function(inst) inst:RemoveTag("scarytoprey") end)
-		inst:Remove()
-		spear:Remove()
-
-		attacker.SoundEmitter:PlaySound("dontstarve/wilson/attack_weapon", nil, nil, true)
-	end
-	
 	inst:AddComponent('spearthrowable')
 	inst.components.spearthrowable:SetRange(8, 10)
-	inst.components.spearthrowable:SetOnAttack(onattack)
+	inst.components.spearthrowable:SetOnAttack(spearthrow_onattack)
 	inst.components.spearthrowable:SetProjectile("spear_projectile")
 end)
 
@@ -230,7 +226,9 @@ local function spearthrow_point(inst, doer, pos, actions, right)
 				if v.replica and v.replica.combat and v.replica.combat:CanBeAttacked(doer) and
 				doer.replica and doer.replica.combat and doer.replica.combat:CanTarget(v)
 				and (not v:HasTag("wall")) and (pvp or ((not pvp)
-						and (not (doer:HasTag("player") and v:HasTag("player"))))) then
+						and (not (doer:HasTag("player") and v:HasTag("player")))))
+                and (doer.components.playercontroller:IsControlPressed(GLOBAL.CONTROL_FORCE_ATTACK)
+                        or not doer.replica.combat:IsAlly(v)) then
 					target = v
 					break
 				end
@@ -251,7 +249,8 @@ local function spearthrow_target(inst, doer, target, actions, right)
 		and target.replica.combat:CanBeAttacked(doer)
 		and (pvp or ((not pvp)
 					and (not (doer:HasTag("player") and target:HasTag("player")))))
-			then
+        and (doer.components.playercontroller:IsControlPressed(GLOBAL.CONTROL_FORCE_ATTACK)
+                or not doer.replica.combat:IsAlly(target)) then
 		table.insert(actions, GLOBAL.ACTIONS.SPEARTHROW)
 	end
 end
